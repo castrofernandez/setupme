@@ -101,3 +101,24 @@ describe('setupme', () => {
         expect(console.error).to.be.calledOnceWith('[setupme] The option "invalid" is not valid.');
     });
 });
+
+describe('setupme objects', () => {
+    it('objects', () => {
+        const {success} = setupme.validate({
+            obj: {},
+            bool: true,
+            array: [],
+        }, {
+            obj: {
+                a: 1,
+            },
+            bool: false,
+            array: [1, 2, 3],
+        }, {
+            strictly: false,
+            deeply: false,
+        });
+
+        expect(success).to.be.true;
+    });
+});

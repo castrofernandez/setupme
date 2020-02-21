@@ -8,22 +8,49 @@ const WRONG_TYPE = 'WRONG_TYPE';
 const DEFAULT_SETTINGS = {
     logErrors: true,
     logName: 'setupme',
+    strictly: true,
+    deeply: true,
 };
 
-const getInvalidOptions = (defaultOptions = {}, options = {}) => {
-    return compareme
-        .get(defaultOptions)
-        .unexpected.elements.strictly.and.deeply.with(options)
+const DEFAULT_MODE_HANDLER = (comparer) => comparer;
+
+const MODE_HANDER = [
+    {
+        applies: ({strictly, deeply}) => strictly === true && deeply === true,
+        get: (comparer) => comparer.strictly.and.deeply,
+    },
+    {
+        applies: ({strictly, deeply}) => strictly === true && deeply === false,
+        get: (comparer) => comparer.strictly,
+    },
+    {
+        applies: ({strictly, deeply}) => strictly === false && deeply === true,
+        get: (comparer) => comparer.deeply,
+    },
+    {
+        applies: ({strictly, deeply}) => strictly === false && deeply === false,
+        get: DEFAULT_MODE_HANDLER,
+    },
+];
+
+const findModeHandler = (conditions) => MODE_HANDER.find(({applies}) => applies(conditions));
+
+const getModeHandler = (conditions) => findModeHandler(conditions) || {get: DEFAULT_MODE_HANDLER};
+
+const getComparer = ({strictly = true, deeply = true}) => getModeHandler({strictly, deeply}).get;
+
+const getInvalidOptions = (defaultOptions = {}, options = {}, settings = {}) => {
+    return getComparer(settings)(compareme.get(defaultOptions).unexpected.elements)
+        .with(options)
         .map((diff) => ({
             error: INVALID,
             key: diff.index,
         }));
 };
 
-const getWrongTypeOptions = (defaultOptions = {}, options = {}) => {
-    return compareme
-        .get(defaultOptions)
-        .type.differences.strictly.and.deeply.with(options)
+const getWrongTypeOptions = (defaultOptions = {}, options = {}, settings = {}) => {
+    return getComparer(settings)(compareme.get(defaultOptions).type.differences)
+        .with(options)
         .map((diff) => ({
             error: WRONG_TYPE,
             key: diff.index,
@@ -32,9 +59,9 @@ const getWrongTypeOptions = (defaultOptions = {}, options = {}) => {
         }));
 };
 
-const getErrors = (defaultOptions = {}, options = {}) => [
-    ...getWrongTypeOptions(defaultOptions, options),
-    ...getInvalidOptions(defaultOptions, options),
+const getErrors = (defaultOptions = {}, options = {}, settings = {}) => [
+    ...getWrongTypeOptions(defaultOptions, options, settings),
+    ...getInvalidOptions(defaultOptions, options, settings),
 ];
 
 const getResultData = (errors = []) => ({
@@ -42,31 +69,36 @@ const getResultData = (errors = []) => ({
     errors,
 });
 
-const doLogErrors = (defaultOptions, options, logName) => {
-    getWrongTypeOptions(defaultOptions, options).forEach((diff) => {
+const doLogErrors = (defaultOptions, options, settings = {}) => {
+    const {logName} = settings;
+
+    getWrongTypeOptions(defaultOptions, options, settings).forEach((diff) => {
         console.error(`[${logName}] The option "${diff.key}" is expected to be ` +
             `"${diff.expected}" but received as "${diff.actual}".`);
     });
 
-    getInvalidOptions(defaultOptions, options).forEach((diff) => {
+    getInvalidOptions(defaultOptions, options, settings).forEach((diff) => {
         console.error(`[${logName}] The option "${diff.key}" is not valid.`);
     });
 };
 
 const getSettings = (defaultOptions = {}, options = {}) => Object.assign({}, defaultOptions, options);
 
-const logErrorsIfRequested = (defaultOptions = {}, options = {}, {
-    logErrors = DEFAULT_SETTINGS.logErrors,
-    logName = DEFAULT_SETTINGS.logName,
-}) => logErrors ? doLogErrors(defaultOptions, options, logName) : false;
+const logErrorsIfRequested = (defaultOptions = {}, options = {}, settings = {}) => {
+    const {logErrors} = settings;
+    return logErrors ? doLogErrors(defaultOptions, options, settings) : false;
+};
 
-const printErrorsOfSetupMeSettings = (settings) => doLogErrors(DEFAULT_SETTINGS, settings, DEFAULT_SETTINGS.logName);
+const printErrorsOfSetupMeSettings = (settings) => doLogErrors(DEFAULT_SETTINGS, settings, DEFAULT_SETTINGS);
+
+const doValidate = (defaultOptions = {}, options = {}, settings = {}) => {
+    logErrorsIfRequested(defaultOptions, options, settings);
+    return getResultData(getErrors(defaultOptions, options, settings));
+};
 
 const validate = (defaultOptions = {}, options = {}, settings = {}) => {
     printErrorsOfSetupMeSettings(settings);
-    logErrorsIfRequested(defaultOptions, options, getSettings(settings));
-
-    return getResultData(getErrors(defaultOptions, options));
+    return doValidate(defaultOptions, options, getSettings(DEFAULT_SETTINGS, settings));
 };
 
 export default {
